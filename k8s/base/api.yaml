@@ -13,6 +13,7 @@ spec:
     metadata: { labels: { app: api } }
     spec:
       securityContext: { runAsNonRoot: true, runAsUser: 10001, fsGroup: 10001 }
+      terminationGracePeriodSeconds: 40
       initContainers:
         # the API builds BM25 from the indexer's chunks at start-up: wait until they exist instead of crash-looping
         - name: wait-index
@@ -38,6 +39,10 @@ spec:
             httpGet: { path: /api/health, port: http }
             periodSeconds: 20
             failureThreshold: 3
+          lifecycle:
+            # Removing a pod from the Service endpoints and sending it SIGTERM happen in parallel. Without this pause
+            # the pod stopped while nginx/kube-proxy still routed to it: 3 of 819 requests failed in CI run #5.
+            preStop: { exec: { command: ["sleep", "10"] } }
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
