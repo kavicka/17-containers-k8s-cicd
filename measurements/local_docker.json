@@ -1,0 +1,22 @@
+{
+ "_note": "Measured in the cloud session (Linux x86_64, 4 CPU cores, no GPU) with docker 29.9.2 / compose v5.6.1, while another CPU-heavy job (the step 16 agent eval) was running: durations are upper bounds.",
+ "images": {
+  "api_onnx_bytes": 865942443,
+  "web_bytes": 73930777,
+  "python_3_12_slim_base_bytes": 177316216,
+  "api_layers_mb": {"venv": 273, "models_baked_in": 152}
+ },
+ "pytorch_footprint": {
+  "torch_nvidia_triton_in_step15_venv_gb": 5.1,
+  "onnxruntime_package_mb": 63,
+  "_note": "The torch variant of the API image was not built: the build ran the session's disk full. The PyTorch number is the size of torch + nvidia-* + triton in the step 15 environment."
+ },
+ "compose": {
+  "up_to_all_healthy_s": 1281,
+  "indexer_embed_s": 1263.3,
+  "n_chunks": 5218,
+  "api_start_to_healthy_s": 5.85,
+  "smoke": "ok",
+  "search_rerank_via_nginx_ms": [2521, 3883]
+ }
+}
