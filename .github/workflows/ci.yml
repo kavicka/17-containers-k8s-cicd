@@ -17,6 +17,9 @@ jobs:
       - run: uv sync              # no embedding backend: unit tests don't load models
       - run: uv run ruff check .
       - run: uv run pytest -q
+      - name: Lint the scripts and plots at the repo root
+        working-directory: .
+        run: uv sync && uv run ruff check . && uv run ruff format --check .
 
   terraform:
     name: terraform fmt + validate

@@ -31,7 +31,11 @@ def footprint() -> None:
     ort = LOCAL["pytorch_footprint"]["onnxruntime_package_mb"]
     fig, (a, b) = plt.subplots(1, 2, figsize=(10, 3.4), gridspec_kw={"width_ratios": [1.3, 1]})
     left = 0
-    for name, mb, color in (("python:3.12-slim", base, GRAY), ("Python packages", venv, BLUE), ("models", models, GREEN)):
+    for name, mb, color in (
+        ("python:3.12-slim", base, GRAY),
+        ("Python packages", venv, BLUE),
+        ("models", models, GREEN),
+    ):
         a.barh(0, mb, left=left, color=color, label=f"{name} ({mb:.0f} MB)")
         left += mb
     a.barh(1, img["web_bytes"] / 1e6, color=ORANGE, label=f"web image ({img['web_bytes'] / 1e6:.0f} MB)")

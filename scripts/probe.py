@@ -1,5 +1,6 @@
 """Hit a URL in a tight loop for N seconds and count failures: measures availability during a rollout."""
 
+import http.client
 import json
 import sys
 import time
@@ -18,7 +19,7 @@ def main(url: str, seconds: float) -> None:
                 r.read()
             ok += 1
             lat.append((time.perf_counter() - t) * 1000)
-        except Exception as e:  # any error during the rollout counts as downtime
+        except (OSError, http.client.HTTPException) as e:  # refused, reset, timeout, HTTP 5xx: all count as downtime
             failed += 1
             errors[type(e).__name__] = errors.get(type(e).__name__, 0) + 1
         time.sleep(0.1)
