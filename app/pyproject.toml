@@ -1,0 +1,39 @@
+[project]
+name = "rag-clinical-app"
+version = "0.1.0"
+description = "The step 15 RAG app, packaged for containers (step 17)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "httpx>=0.28",
+    "pydantic-settings>=2.6",
+    "qdrant-client>=1.12",
+    "numpy>=2.1",
+]
+
+[project.optional-dependencies]
+# Embedding backends: pick one. The serving image uses onnx (no PyTorch); torch is what steps 14-15 used.
+onnx = ["fastembed>=0.9"]
+torch = ["sentence-transformers>=3.3"]
+# Cloud LLM providers are optional: the default stack runs fully local (Ollama) at 0 €.
+bedrock = ["boto3>=1.35"]
+azure = ["openai>=1.55"]
+
+[dependency-groups]
+dev = [
+    "matplotlib>=3.9",  # plots only: not needed in the serving image
+    "ruff>=0.8",
+    "pytest>=8.3",
+]
+
+[tool.ruff]
+line-length = 120
+extend-exclude = ["frontend"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

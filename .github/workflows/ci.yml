@@ -1,11 +1,142 @@
 name: ci
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+
 jobs:
-  lint:
+  test:
+    name: lint + unit tests
     runs-on: ubuntu-latest
+    defaults: { run: { working-directory: app } }
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
-      - run: uv sync
+      - run: uv sync              # no embedding backend: unit tests don't load models
       - run: uv run ruff check .
-      - run: uv run ruff format --check .
+      - run: uv run pytest -q
+
+  terraform:
+    name: terraform fmt + validate
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: infra } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+
+  compose:
+    name: docker compose + smoke + eval gate
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build images (layer cache in GitHub Actions)
+        run: |
+          start=$(date +%s)
+          docker buildx build --load --cache-from type=gha,scope=api --cache-to type=gha,scope=api,mode=max \
+            -f docker/api.Dockerfile -t rag-clinical-api:dev .
+          docker buildx build --load --cache-from type=gha,scope=web --cache-to type=gha,scope=web,mode=max \
+            -f docker/web.Dockerfile -t rag-clinical-web:dev .
+          echo "BUILD_S=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+          docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep rag-clinical | tee images.txt
+      - name: Start the stack (indexer downloads the trials and builds the index)
+        run: |
+          start=$(date +%s)
+          docker compose up -d --no-build --wait --wait-timeout 1200
+          echo "UP_S=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+      - name: Smoke test through nginx
+        run: scripts/smoke.sh | tee smoke.json
+      - name: Retrieval eval against the running stack + quality gate
+        run: |
+          mkdir -m 777 out
+          docker compose run --rm --no-deps -v "$PWD/out:/out" -e RESULTS_PATH=/out/results.json api \
+            python eval/run_eval.py --retrieval --chunkings section --modes dense rerank
+          python3 scripts/eval_gate.py out/results.json
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### compose"; echo '```'; cat images.txt 2>/dev/null; echo "build: ${BUILD_S:-?} s, up: ${UP_S:-?} s"
+            cat smoke.json 2>/dev/null; echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - if: failure()
+        run: docker compose logs --tail 80
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compose-results
+          path: |
+            out/
+            smoke.json
+            images.txt
+
+  kind:
+    name: kubernetes (kind) deploy + zero-downtime rollout
+    needs: [test, terraform]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build images
+        run: |
+          docker buildx build --load --cache-from type=gha,scope=api -f docker/api.Dockerfile -t rag-clinical-api:ci .
+          docker buildx build --load --cache-from type=gha,scope=web -f docker/web.Dockerfile -t rag-clinical-web:ci .
+      - uses: helm/kind-action@v1
+        with: { cluster_name: rag }
+      - name: Load images into the cluster (no registry needed)
+        run: kind load docker-image rag-clinical-api:ci rag-clinical-web:ci --name rag
+      - uses: hashicorp/setup-terraform@v3
+      - name: Platform layer with Terraform (namespace, quota, limits, config)
+        working-directory: infra
+        run: |
+          terraform init -input=false
+          terraform apply -auto-approve -input=false -var kube_context=kind-rag
+      - name: Deploy the app with kustomize
+        run: |
+          start=$(date +%s)
+          kubectl apply -k k8s/overlays/kind
+          kubectl -n rag wait --for=condition=complete job/indexer --timeout=20m
+          kubectl -n rag rollout status deploy/api --timeout=10m
+          kubectl -n rag rollout status deploy/web --timeout=5m
+          echo "DEPLOY_S=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+          kubectl -n rag get pods -o wide
+      - name: Smoke test through the web service
+        run: |
+          kubectl -n rag port-forward svc/web 8080:8080 > /dev/null 2>&1 &
+          sleep 3
+          scripts/smoke.sh | tee smoke.json
+      - name: Rolling restart under load (maxUnavailable 0 → no failed requests expected)
+        run: |
+          python3 scripts/probe.py http://localhost:8080/api/health 90 > probe.json &
+          sleep 2
+          start=$(date +%s)
+          kubectl -n rag rollout restart deploy/api
+          kubectl -n rag rollout status deploy/api --timeout=10m
+          echo "ROLLOUT_S=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+          wait
+          cat probe.json
+          python3 -c "import json,sys; r=json.load(open('probe.json')); sys.exit(1 if r['failed'] else 0)"
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### kind"; echo '```'; echo "deploy (apply → indexer done → api/web ready): ${DEPLOY_S:-?} s"
+            echo "rolling restart of 2 api pods: ${ROLLOUT_S:-?} s"; cat smoke.json probe.json 2>/dev/null; echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - if: failure()
+        run: |
+          kubectl -n rag get all,events --sort-by=.lastTimestamp | tail -60
+          kubectl -n rag logs job/indexer --tail=60 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kind-results
+          path: |
+            smoke.json
+            probe.json

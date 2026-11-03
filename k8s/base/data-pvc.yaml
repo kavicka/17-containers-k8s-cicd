@@ -1,0 +1,7 @@
+# Chunks + documents written by the indexer and read by the API (BM25 is rebuilt from them at start-up).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: appdata }
+spec:
+  accessModes: [ReadWriteOnce]   # single-node kind: fine; on a real cluster use ReadWriteMany or object storage
+  resources: { requests: { storage: 1Gi } }

@@ -1,0 +1,59 @@
+# The step 15 app as four services:
+#   qdrant   vector database (official image, health-checked)
+#   indexer  one-shot job: download the frozen trial list, chunk, embed, write vectors to qdrant + chunks to a volume
+#   api      FastAPI (BM25 + vectors + reranker + LLM), starts only after the indexer finished successfully
+#   web      nginx serving the React build and proxying /api
+# LLM: LLM_PROVIDER=fake for smoke tests and CI; on the Mac use Ollama on the host (see .env.example).
+name: rag-clinical
+
+x-app-env: &app-env
+  QDRANT_URL: http://qdrant:6333
+  CHUNKING: section
+  LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+  LLM_MODEL: ${LLM_MODEL:-qwen3:4b}
+  OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    volumes: [qdrant:/qdrant/storage]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 5s
+      retries: 20
+
+  indexer:
+    image: rag-clinical-api:${TAG:-dev}
+    build: { context: ., dockerfile: docker/api.Dockerfile }
+    command: ["sh", "-c", "([ -f /data/studies.jsonl ] || python -m rag.ingest --from-ids) && python -m rag.index --chunking section"]
+    environment: *app-env
+    volumes: [appdata:/data]
+    depends_on:
+      qdrant: { condition: service_healthy }
+    user: "10001"
+    healthcheck: { disable: true }   # the image's healthcheck probes the API, which a batch job doesn't run
+
+  api:
+    image: rag-clinical-api:${TAG:-dev}
+    environment: *app-env
+    volumes: [appdata:/data:ro]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    depends_on:
+      qdrant: { condition: service_healthy }
+      indexer: { condition: service_completed_successfully }
+    read_only: true          # the API never writes: a read-only root filesystem limits what an attacker could do
+    tmpfs: [/tmp]
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 2g }
+
+  web:
+    image: rag-clinical-web:${TAG:-dev}
+    build: { context: ., dockerfile: docker/web.Dockerfile }
+    ports: ["127.0.0.1:8080:8080"]   # only the UI is published, and only on localhost
+    depends_on:
+      api: { condition: service_healthy }
+
+volumes:
+  qdrant:
+  appdata:

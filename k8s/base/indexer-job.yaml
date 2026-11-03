@@ -1,0 +1,27 @@
+# One-shot batch job: download the frozen trial list, chunk, embed into Qdrant. Same image as the API.
+apiVersion: batch/v1
+kind: Job
+metadata: { name: indexer }
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: OnFailure
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, fsGroup: 10001 }
+      initContainers:
+        - name: wait-qdrant
+          image: busybox:1.36
+          command: ["sh", "-c", "until nc -z qdrant 6333; do sleep 2; done"]
+      containers:
+        - name: indexer
+          image: rag-clinical-api
+          command: ["sh", "-c", "([ -f /data/studies.jsonl ] || python -m rag.ingest --from-ids) && python -m rag.index --chunking section"]
+          envFrom: [{ configMapRef: { name: rag-config } }]
+          env: [{ name: HF_HUB_OFFLINE, value: "1" }]
+          resources:
+            requests: { cpu: 500m, memory: 1Gi }
+            limits: { memory: 2Gi }
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+          volumeMounts: [{ name: data, mountPath: /data }]
+      volumes: [{ name: data, persistentVolumeClaim: { claimName: appdata } }]
