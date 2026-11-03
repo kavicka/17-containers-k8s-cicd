@@ -41,8 +41,10 @@ def load_questions() -> list[dict]:
 
 
 def hardware() -> str:
-    import torch
-
+    try:
+        import torch
+    except ImportError:  # the onnx serving image has no PyTorch
+        return f"{platform.system()} {platform.machine()}, cpu (onnxruntime, {os.cpu_count()} cores)"
     dev = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
     return f"{platform.system()} {platform.machine()}, torch device {dev}"
 
