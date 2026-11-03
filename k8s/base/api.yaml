@@ -3,6 +3,8 @@ kind: Deployment
 metadata: { name: api }
 spec:
   replicas: 2
+  # the first rollout waits (init container) until the indexer job has embedded everything: ~15 min on a CI runner
+  progressDeadlineSeconds: 1800
   selector: { matchLabels: { app: api } }
   strategy:
     type: RollingUpdate

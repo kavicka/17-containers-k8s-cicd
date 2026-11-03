@@ -131,7 +131,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
       - if: failure()
         run: |
-          kubectl -n rag get all,events --sort-by=.lastTimestamp | tail -60
+          kubectl -n rag get all
+          kubectl -n rag get events --sort-by=.metadata.creationTimestamp | tail -40
           kubectl -n rag logs job/indexer --tail=60 || true
       - uses: actions/upload-artifact@v4
         if: always()

@@ -11,7 +11,7 @@ spec:
     spec:
       containers:
         - name: qdrant
-          image: qdrant/qdrant:v1.12.4
+          image: qdrant/qdrant:v1.20.0
           ports: [{ containerPort: 6333, name: http }]
           readinessProbe: { tcpSocket: { port: 6333 }, periodSeconds: 5 }
           resources:
