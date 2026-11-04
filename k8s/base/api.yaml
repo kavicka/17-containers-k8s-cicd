@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: api }
+spec:
+  replicas: 2
+  # the first rollout waits (init container) until the indexer job has embedded everything: ~15 min on a CI runner
+  progressDeadlineSeconds: 1800
+  selector: { matchLabels: { app: api } }
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }   # never fewer ready pods than replicas during a rollout
+  template:
+    metadata: { labels: { app: api } }
+    spec:
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, fsGroup: 10001 }
+      terminationGracePeriodSeconds: 40
+      initContainers:
+        # the API builds BM25 from the indexer's chunks at start-up: wait until they exist instead of crash-looping
+        - name: wait-index
+          image: busybox:1.36
+          command: ["sh", "-c", "until [ -f /data/index/section/stats.json ]; do sleep 3; done"]
+          volumeMounts: [{ name: data, mountPath: /data, readOnly: true }]
+      containers:
+        - name: api
+          image: rag-clinical-api
+          ports: [{ containerPort: 8000, name: http }]
+          envFrom: [{ configMapRef: { name: rag-config } }]
+          resources:
+            requests: { cpu: 250m, memory: 768Mi }
+            limits: { memory: 1536Mi }
+          startupProbe:    # model loading + BM25 build: give it time once, then probe fast
+            httpGet: { path: /api/health, port: http }
+            periodSeconds: 3
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: { path: /api/health, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /api/health, port: http }
+            periodSeconds: 20
+            failureThreshold: 3
+          lifecycle:
+            # Removing a pod from the Service endpoints and sending it SIGTERM happen in parallel. Without this pause
+            # the pod stopped while nginx/kube-proxy still routed to it: 3 of 819 requests failed in CI run #5.
+            preStop: { exec: { command: ["sleep", "10"] } }
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: data, mountPath: /data, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: data, persistentVolumeClaim: { claimName: appdata } }
+        - { name: tmp, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: api }
+spec:
+  selector: { app: api }
+  ports: [{ port: 8000, targetPort: http, name: http }]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: api }
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app: api } }

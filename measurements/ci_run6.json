@@ -1,0 +1,10 @@
+{
+ "_source": "GitHub Actions run #6 (https://github.com/kavicka/17-containers-k8s-cicd/actions/runs/41711067996), ubuntu-latest runner, copied from the job logs",
+ "jobs": {"lint+tests": "success", "terraform": "success", "compose+smoke+eval gate": "success", "kind": "success"},
+ "kind": {
+  "deploy_s": 755,
+  "rollout_restart_s": 10,
+  "probe": {"requests": 864, "failed": 0, "errors": {}, "p95_ms": 5.0},
+  "manifest": "maxUnavailable 0, maxSurge 1, preStop sleep 10, terminationGracePeriodSeconds 40"
+ }
+}

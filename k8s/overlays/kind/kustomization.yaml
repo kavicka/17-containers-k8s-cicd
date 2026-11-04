@@ -1,0 +1,17 @@
+# Local kind cluster (and CI): images are loaded with `kind load docker-image`, never pulled.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: [../../base]
+images:
+  - { name: rag-clinical-api, newName: rag-clinical-api, newTag: ci }
+  - { name: rag-clinical-web, newName: rag-clinical-web, newTag: ci }
+patches:
+  - target: { kind: Deployment, name: api }
+    patch: |-
+      - { op: add, path: /spec/template/spec/containers/0/imagePullPolicy, value: Never }
+  - target: { kind: Deployment, name: web }
+    patch: |-
+      - { op: add, path: /spec/template/spec/containers/0/imagePullPolicy, value: Never }
+  - target: { kind: Job, name: indexer }
+    patch: |-
+      - { op: add, path: /spec/template/spec/containers/0/imagePullPolicy, value: Never }

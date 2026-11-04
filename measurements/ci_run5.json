@@ -1,0 +1,47 @@
+{
+ "_source": "GitHub Actions run #5 (https://github.com/kavicka/17-containers-k8s-cicd/actions/runs/41707292375), ubuntu-latest runner, copied from the job logs",
+ "jobs": {
+  "lint+tests": "success",
+  "terraform": "success",
+  "compose+smoke+eval gate": "success",
+  "kind": "failure (rolling restart)"
+ },
+ "kind": {
+  "deploy_s": 741,
+  "indexer_embed_s": 714.9,
+  "rollout_restart_s": 9,
+  "probe": {
+   "requests": 819,
+   "failed": 3,
+   "errors": {
+    "HTTPError": 2,
+    "TimeoutError": 1
+   },
+   "p95_ms": 4.5
+  },
+  "manifest": "maxUnavailable 0, maxSurge 1, no preStop hook"
+ },
+ "compose": {
+  "build_s_with_layer_cache": 40,
+  "up_to_all_healthy_s": 830,
+  "indexer_s_approx": 815,
+  "api_healthy_after_indexer_s": 5.6,
+  "smoke": "ok",
+  "search_rerank_via_nginx_ms": 3102,
+  "eval_gate": {
+   "dense": {
+    "evidence@5": 0.968,
+    "latency_ms_p50": 19.8
+   },
+   "rerank": {
+    "evidence@5": 0.992,
+    "latency_ms_p50": 3103.9
+   },
+   "result": "PASS"
+  },
+  "images": {
+   "rag-clinical-api:dev": "866MB",
+   "rag-clinical-web:dev": "73.9MB"
+  }
+ }
+}

@@ -1,7 +1,7 @@
 [project]
-name = "nn-short-name"
+name = "containers-k8s-cicd"
 version = "0.1.0"
-description = "One-line description of the step"
+description = "Step 17: the step 15 app in containers, Kubernetes, CI/CD and Terraform (plots + scripts only here)"
 requires-python = ">=3.12"
 dependencies = [
     "matplotlib>=3.11.2",
@@ -15,3 +15,4 @@ dev = [
 
 [tool.ruff]
 line-length = 120
+extend-exclude = ["app"]

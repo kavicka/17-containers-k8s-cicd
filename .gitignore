@@ -6,3 +6,11 @@ mlruns/
 .pytest_cache/
 data/
 models/
+app/.venv/
+app/data/
+**/node_modules/
+**/dist/
+out/
+infra/.terraform/
+infra/*.tfstate*
+.ruff_cache/

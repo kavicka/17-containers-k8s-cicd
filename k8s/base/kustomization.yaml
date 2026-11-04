@@ -1,0 +1,13 @@
+# App workloads. The namespace, quota and config come from Terraform (infra/), so platform and app have separate owners.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: rag
+resources:
+  - qdrant.yaml
+  - data-pvc.yaml
+  - indexer-job.yaml
+  - api.yaml
+  - web.yaml
+labels:
+  - pairs: { app.kubernetes.io/part-of: rag-clinical }
+    includeSelectors: false
